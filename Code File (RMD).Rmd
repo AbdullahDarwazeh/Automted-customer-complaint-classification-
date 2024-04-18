@@ -1,0 +1,192 @@
+---
+title: "Factors Affecting Salary in IT Sector"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+library(dplyr)
+library(pwr)
+```
+
+
+## Introduction
+
+In this project we will be working with the salaries data set that is downloaded from the Kaggle's website and could be found at https://www.kaggle.com/datasets/parulpandey/2020-it-salary-survey-for-eu-region. The dependent variable selected in this case is annual salary and the independent variable selected are age, experience and a categorical variable with 5 distinct categories. Our goal is to explore the effect of these there independent variables on the dependent variables using mathematical regression model.
+
+## Research Question:
+
+The main research question that is answered in this analysis is to find out what are the factors affecting the salary of a person. For this purpose, regression model will be implemented to find out the statistically significant predictors and their effects on the target variable. The underlying business problem addressed in this analysis pertains to understanding the factors influencing salaries within the IT industry in the European region. By exploring the relationship between annual salary and various independent variables such as age, experience, and company size, the aim is to provide insights that could assist organizations in making informed decisions related to compensation structures and workforce management.
+
+## Data Preparation
+
+Read the data set file as we have too many columns in the data set we will be working only with 4 columns which are relevant in this research. Our main research goal is to explain the effect of company size, age and experience on the annual salary of an employee.
+
+```{r}
+data <- read.csv("IT Salary Survey EU  2020.csv")
+```
+
+
+A subset of data is created in which we have only 5 variables which are company size, annual salary, age, gender and experience. The column names are renamed to have cleaned data and column names.
+
+```{r}
+data <- data[,c("Company.size",
+                "Yearly.brutto.salary..without.bonus.and.stocks..in.EUR",
+                "Total.years.of.experience",
+                "Age",
+                "Gender")]
+colnames(data) <- c("Company Size", 
+                    "Annual Salary", 
+                    "Experience (Yrs)", 
+                    "Age",
+                    "Gender")
+head(data)
+```
+
+Finally the null values are omitted and some of the rows in company size column contained some empty values that too are filtered out. We can see we have 5 type of companies in this case.
+
+```{r, warning=FALSE}
+data <- na.omit(data)
+data$`Experience (Yrs)` <- as.numeric(data$`Experience (Yrs)`)
+data <- data %>%
+  filter(`Company Size` != "")
+unique(data$`Company Size`)
+```
+
+## Sample Estimate
+
+In order to estimate the sample size using Gpower the power anova test with significance level 0.05 and power set ti 0.80 is performed. It can be seen that the result tells us the sample of 240 (rounded) approximately from each group.
+
+```{r}
+#GPower
+ pwr.anova.test(k = 5 , 
+                f = 0.1 , 
+                sig.level = 0.05 , 
+                power = 0.80 )
+```
+
+## Descriptive Statistics
+
+The summary statistics of the data is attached below which tells us about 6 number summary of each variable. This includes minimum, maximum, mean, median 1st quartile and 3rd quartile. The maximum salary is too high we can see it possibly might be an outlier which needs to be removed from the data to avoid biasness. Same goes for experience no one could have an experience of 383 years as the average age is 80-90 at max. Hence these outliers will be removed from the dataset in next step.
+
+
+```{r}
+summary(data)
+```
+
+```{r}
+Q1 <- quantile(data$`Annual Salary`, .25)
+Q3 <- quantile(data$`Annual Salary`, .75)
+IQR <- IQR(data$`Annual Salary`)
+no_outliers <- subset(data, 
+                      data$`Annual Salary` > (Q1 - 1.5*IQR) & 
+                        data$`Annual Salary` < (Q3 + 1.5*IQR))
+
+Q1 <- quantile(data$`Experience (Yrs)`, .25, na.rm = T)
+Q3 <- quantile(data$`Experience (Yrs)`, .75, na.rm = T)
+IQR <- IQR(data$`Experience (Yrs)`, na.rm = T)
+no_outliers <- subset(no_outliers, 
+                      data$`Experience (Yrs)` > (Q1 - 1.5*IQR) & 
+                        data$`Experience (Yrs)` < (Q3 + 1.5*IQR))
+dim(no_outliers)
+```
+
+To further understand the data a box plot for our dependent variable is created. It can be seen that the average salary is around 60,000 while there are no outliers in the data set.
+
+```{r, fig.height=3}
+boxplot(no_outliers$`Annual Salary`, 
+        main = "Boxplot for Annual Salary", 
+        col = "steel blue",
+        xlab = "Annual Salary",
+        ylab = "Value")
+```
+
+A scatter plot to understand the relationship between age and annual salary is drawn. It can be concluded from plot that with increase in age, the annual salary increases because the experience and seniority level of a person increases. Hence a positive relationship exist between both variables.
+
+```{r, fig.height=3.5}
+#Scatter plot between age and salary
+plot(no_outliers$Age, 
+     no_outliers$`Annual Salary`, 
+     main = "Age vs Annual Salary", 
+     xlab = "Age", 
+     ylab = "Annual Salary",
+     pch = 17)
+```
+
+### QQ-Plots:
+
+The QQ plot for checking the normality of our dependent variable annual salary is created below. It can be seen that the points doesn't deviate from the line at 45 degree, hence we can assume normality in this case and could say that our data is normal.
+
+```{r, fig.height=4}
+qqnorm(no_outliers$`Annual Salary`, pch = 1, frame = FALSE)
+qqline(no_outliers$`Annual Salary`, col = "red", lwd = 2)
+```
+
+## Bartletts's Test For Variance
+
+Ho: All populations variances are equal
+
+H1: At least two of them different
+
+When using Bartlett’s test one of the main assumptions data should be normally distributed. We are performing test on Annual Salary and from above QQPlot it can be seen that the data is normally distributed. The p-value is  0.00285 is less than the significance level of 0.05, we can reject the null hypothesis and conclude that there is a significant difference between the tested sample variances.
+
+```{r}
+res <- bartlett.test(`Annual Salary` ~ `Company Size`, data = no_outliers)
+res
+```
+
+## Mathematical Model
+
+Finally a mathematical regression model is created and the summary of model is attached below. From the summary it can be seen that all predictors of our mathematical regression model are significant as their p values are below significance level alpha = 0.05 except experience and gender. The effect of experience and age from the coefficients is positive this means with increase in these two independent variables, the annual salary of a person also increases. Age has higher effect on salary as compared to experience of a person. The mathematical equation thus obtained is attached below:
+
+  Annual Salary = 57158.32 
+                  - 3674.94 * `Company Size`101-1000
+                  - 6989.40 * `Company Size`11-50
+                  - 8130.37 * `Company Size`51-100
+                  - 16205.06 * `Company Size`up to 10
+                  + 60.51 * Experience 
+                  + 594.71 * Age
+                  - 12552.29 * GenderFemale
+                  -2483.83 * GenderMale
+                  
+The constants involved in above mathematical equation thus obtained from below results are the effects of each variable. The variable names which are multiplied to constants are the features and factors that are involved in this mathematical regression model.
+
+```{r}
+model <- lm(`Annual Salary` ~., data = no_outliers)
+summary(model)
+```
+
+## Model Assumptions:
+
+ Let's test the significance of our model. For this purpose we will perform F test which is obtained from summary function attached above:
+ 
+H0 = Null Hypothesis = The model is not significant.
+
+H1 = Alternate Hypothesis = The model is significant.
+
+As the p value of our model is 2.2e-16 which is less as compared to significance level alpha = 0.05, we can reject the null hypothesis and conclude that the regression mathematical model built is significant with a p value of 2.2e-16.
+
+## Implications of Results:
+
+The results obtained from the regression analysis shed light on the significant predictors affecting annual salaries. Age, experience, and company size are identified as statistically significant factors influencing salary levels within the IT industry. Specifically, the analysis suggests that as age and experience increase, so does the annual salary, albeit with age exerting a stronger effect compared to experience. Additionally, the size of the company also plays a crucial role, with larger companies generally offering higher salaries.
+
+## Recommendations:
+
+Based on the findings, the following recommendations are proposed to address the initial business problem:
+
+- Organizations can review and potentially revise their compensation structures. They can adjust salary scales based on factors such as age, experience, and company size to ensure competitiveness in retaining talent.
+
+- Recognizing the strong influence of experience on salary levels, organizations could invest in talent development programs aimed at upskilling employees.
+
+## Conclusion & Future Work:
+
+Concluding this whole process, we have found that the age and experience effects the annual salary in positive way. This means increase in those two independent values increases the salary as well. Looking at the categorical variable we found that bigger companies offers good compensation as compared to smaller companies. We can see that the coefficient of the company size up to 10 is -15570 which means the annual salary decreases by this much amount when the company size is up to 10 and so on.
+
+To enhance the robustness and applicability of the analysis, future research could consider incorporating additional variables such as education level, job specialization, and geographic location which could provide a more comprehensive understanding of salary determinants within the IT industry. Moreover longitudinal studies to track salary trends over time could be performed along with industry-specific analysis.
